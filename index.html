@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>HMI • Navegación SCADA (ISA‑101)</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    /* Árbol y acordeón */
+    .nav-tree ul{padding-left:1rem;border-left:1px solid #4a5568}
+    .nav-tree-item{cursor:pointer;padding:6px 8px;border-radius:4px;display:flex;align-items:center}
+    .nav-tree-item:hover{background:#4a5568}
+    .nav-toggle{display:flex;align-items:center;gap:8px}
+    .caret-char{display:inline-block;width:1rem;text-align:center}
+    .nav-children{margin-top:4px;padding-left:.75rem;border-left:1px solid #4a5568}
+    .nav-hidden{display:none}
+    .placeholder-16-9{aspect-ratio:16/9}
+    .breadcrumbs a{color:#93c5fd}
+    .breadcrumbs span.sep{padding:0 .25rem;color:#94a3b8}
+  </style>
+</head>
+<body class="bg-gray-900 text-gray-200 flex h-screen overflow-hidden">
+  <!-- Lateral -->
+  <aside class="bg-gray-800 w-80 p-4 overflow-y-auto">
+    <h2 class="text-xl font-bold mb-4">Jerarquía HMI</h2>
+    <div class="flex gap-2 mb-3">
+      <button id="expand-all" class="px-2 py-1 bg-gray-700 rounded">Expandir todo</button>
+      <button id="collapse-all" class="px-2 py-1 bg-gray-700 rounded">Colapsar todo</button>
+    </div>
+    <nav id="nav-tree" class="nav-tree"></nav>
+  </aside>
+
+  <!-- Contenido -->
+  <div class="flex-1 flex flex-col overflow-hidden">
+    <main class="flex-1 p-6 overflow-y-auto">
+      <div class="mb-4">
+        <nav id="breadcrumbs" class="breadcrumbs text-sm mb-2"></nav>
+        <h1 id="screen-title" class="text-3xl font-bold text-white"></h1>
+        <p id="screen-description" class="text-lg text-gray-400 mt-1"></p>
+      </div>
+
+      <div id="screen-content" class="placeholder-16-9 w-full max-w-6xl mx-auto bg-gray-800 border-2 border-gray-700 rounded-lg shadow-2xl overflow-hidden">
+        <div class="flex items-center justify-center h-full">
+          <div id="screen-placeholder" class="text-center text-gray-500 py-8">
+            <p class="text-2xl font-semibold">Placeholder 16:9</p>
+            <p class="mt-1">Aquí se mostrará el diseño final de la pantalla.</p>
+            <p class="mt-1">(Formato 16:9)</p>
+          </div>
+        </div>
+      </div>
+
+      <div id="next-level-container" class="mt-8 max-w-6xl mx-auto">
+        <h3 class="text-xl font-semibold text-gray-300 border-b border-gray-700 pb-2 mb-4">Ir a Nivel Inferior:</h3>
+        <div id="next-level-buttons" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4"></div>
+      </div>
+    </main>
+
+    <footer class="bg-gray-800 p-3 flex items-center justify-between border-t border-gray-700 shadow-inner">
+      <button id="back-button" class="flex items-center space-x-2 bg-gray-600 hover:bg-gray-700 text-white font-semibold py-2 px-4 rounded-lg shadow-md transition duration-200 disabled:opacity-50 disabled:cursor-not-allowed">Regresar</button>
+      <button id="bookmark-button" class="flex items-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg shadow-md transition duration-200">Agregar a Bookmarks</button>
+    </footer>
+  </div>
+
+<script>
+/******************* 1) Datos *******************/
+const hmiData = {
+  'L0_GENERAL': 
+    { 
+     id:'L0_GENERAL', 
+    title: 'GENERAL', 
+    level:0, 
+    parent:null, 
+    children: ['L1_GEN_EOLICA','L1_GEN_HIDRAULICA','L1_GEN_FOTOVOLTAICA'], 
+    desc: 'VISTA GENERAL - MAPA DEL PERÚ - PRODUCCIÓN POR CADA CG Y KPIs',
+    img: 'N0/N0General.png'
+    },
+    'L1_GEN_EOLICA': 
+      { 
+        id:'L1_GEN_EOLICA',
+        title: 'GENERACIÓN EÓLICA', 
+        level:1, 
+        parent:'L0_GENERAL', 
+        children: ['L2_CEPLOM_GENERAL','L2_CEPLOM_SE_LOMITAS','L2_CEPLOM_MOTZ_REG','L2_CEPLOM_EST_MET','L2_CEPLOM_SSAA','L2_CEPLOM_ARQRED','L2_CEDHB_GENERAL','L2_CEDHB_SE_HUAMBOS','L2_CEDHB_MOTZ_REG','L2_CEDHB_EST_MET','L2_CEDHB_SSAA','L2_CEDHB_ARQRED'], 
+        desc: 'VISTA POR TIPO DE GENERACIÓN + KPIs + ENLACES',
+        img: 'N1/N1General.png' 
+        },
+
+    'L1_GEN_HIDRAULICA': { id:'L1_GEN_HIDRAULICA', title: 'GENERACIÓN HIDRAULICA', level:1, parent:'L0_GENERAL' },
+    'L1_GEN_FOTOVOLTAICA': { id:'L1_GEN_FOTOVOLTAICA', title: 'GENERACIÓN SOLAR', level:1, parent:'L0_GENERAL' },
+
+        'L2_CEPLOM_GENERAL': { id:'L2_CEPLOM_GENERAL', title:'CEPLOM - GENERAL', level:2, parent:'L1_GEN_EOLICA', children: [], desc:'VISTA DE LA GENERACIÓN EÓLICA + KPIs + ENLACE A PLOM & DH' },
+        'L2_CEPLOM_SE_LOMITAS': { id:'L2_CEPLOM_SE_LOMITAS', title:'CEPLOM - SE LOMITAS', level:2, parent:'L1_GEN_EOLICA', children: ['L3_SE_LOM_UNIFILAR_BARRA_A','L3_SE_LOM_UNIFILAR_BARRA_B','L3_SE_LOM_SSAA','L3_SE_LOM_DISTRIB_125_VDC'], desc:'VISTA UNIFILAR DE SUBESTACIÓN LOMITAS' },
+        'L2_CEPLOM_MOTZ_REG': { id:'L2_CEPLOM_MOTZ_REG', title:'CEPLOM - MOTZ & REG (57 UNIDADES)', level:2, parent:'L1_GEN_EOLICA', children: ['L3_AERO_MOTRZ_RESUMEN','L3_AERO_MOTRZ_PRODUCCION','L3_AERO_MOTRZ_TM01','L3_AERO_MOTRZ_TM02','L3_AERO_REG_AC01','L3_AERO_REG_RE01','L3_AERO_REG_BATERIAS'], desc:'VISTA DE TODOS LOS 57 AEROGENERADORES – LECTURAS, KPIs Y PARÁMETROS' },
+        'L2_CEPLOM_EST_MET': { id:'L2_CEPLOM_EST_MET', title:'CEPLOM - ESTACIÓN METEOROLÓGICA', level:2, parent:'L1_GEN_EOLICA', children: ['L3_ESTMET_MAPA','L3_ESTMET_DISPO_ESTELA'], desc:'PARÁMETROS METEOROLÓGICOS DE PUNTA LOMITAS' },
+        'L2_CEPLOM_SSAA': { id:'L2_CEPLOM_SSAA', title:'CEPLOM - SSAA', level:2, parent:'L1_GEN_EOLICA', children: ['L3_SSAA_UPS','L3_SSAA_VARIABLE','L3_SSAA_P1','L3_SSAA_P2','L3_SSAA_P3','L3_SSAA_P4'], desc:'SERVICIOS AUXILIARES DE PUNTA LOMITAS' },
+        'L2_CEPLOM_ARQRED': { id:'L2_CEPLOM_ARQRED', title:'CEPLOM - ARQUITECTURA RED', level:2, parent:'L1_GEN_EOLICA', children: ['L3_ARQRED_SELOMITAS','L3_ARQRED_SEDERIVACION','L3_ARQRED_AERO'], desc:'ARQUITECTURA DE RED – SUBESTACIONES Y AERO' },
+
+        'L2_CEDHB_GENERAL': { id:'L2_CEDHB_GENERAL', title:'CEDHB - GENERAL', level:2, parent:'L1_GEN_EOLICA', children: [], desc:'VISTA DE LA GENERACIÓN EÓLICA + KPIs + ENLACE A PLOM & DH' },
+        'L2_CEDHB_SE_HUAMBOS': { id:'L2_CEDHB_SE_HUAMBOS', title:'CEDHB - SE HUAMBOS', level:2, parent:'L1_GEN_EOLICA', children: ['L3_SE_LOM_UNIFILAR_BARRA_A','L3_SE_LOM_UNIFILAR_BARRA_B','L3_SE_LOM_SSAA','L3_SE_LOM_DISTRIB_125_VDC'], desc:'VISTA UNIFILAR DE SUBESTACIÓN LOMITAS' },
+        'L2_CEDHB_MOTZ_REG': { id:'L2_CEDHB_MOTZ_REG', title:'CEDHB - MOTZ & REG (57 UNIDADES)', level:2, parent:'L1_GEN_EOLICA', children: ['L3_AERO_MOTRZ_RESUMEN','L3_AERO_MOTRZ_PRODUCCION','L3_AERO_MOTRZ_TM01','L3_AERO_MOTRZ_TM02','L3_AERO_REG_AC01','L3_AERO_REG_RE01','L3_AERO_REG_BATERIAS'], desc:'VISTA DE TODOS LOS 57 AEROGENERADORES – LECTURAS, KPIs Y PARÁMETROS' },
+        'L2_CEDHB_EST_MET': { id:'L2_CEDHB_EST_MET', title:'CEDHB - ESTACIÓN METEOROLÓGICA', level:2, parent:'L1_GEN_EOLICA', children: ['L3_ESTMET_MAPA','L3_ESTMET_DISPO_ESTELA'], desc:'PARÁMETROS METEOROLÓGICOS DE PUNTA LOMITAS' },
+        'L2_CEDHB_SSAA': { id:'L2_CEDHB_SSAA', title:'CEDHB - SSAA', level:2, parent:'L1_GEN_EOLICA', children: ['L3_SSAA_UPS','L3_SSAA_VARIABLE','L3_SSAA_P1','L3_SSAA_P2','L3_SSAA_P3','L3_SSAA_P4'], desc:'SERVICIOS AUXILIARES DE PUNTA LOMITAS' },
+        'L2_CEDHB_ARQRED': { id:'L2_CEDHB_ARQRED', title:'CEDHB - ARQUITECTURA RED', level:2, parent:'L1_GEN_EOLICA', children: ['L3_ARQRED_SELOMITAS','L3_ARQRED_SEDERIVACION','L3_ARQRED_AERO'], desc:'ARQUITECTURA DE RED – SUBESTACIONES Y AERO' },
+
+          
+   'L3_SE_LOM_UNIFILAR_BARRA_A': { id:'L3_SE_LOM_UNIFILAR_BARRA_A', title:'SE_LOM_UNIFILAR_BARRA_A', level:3, parent:'L2_CEPLOM_SE_LOMITAS', children: [], desc:'VISTA UNIFILAR DE LA BARRA A' },
+  'L3_SE_LOM_UNIFILAR_BARRA_B': { id:'L3_SE_LOM_UNIFILAR_BARRA_B', title:'SE_LOM_UNIFILAR_BARRA_B', level:3, parent:'L2_CEPLOM_SE_LOMITAS', children: [], desc:'VISTA UNIFILAR DE LA BARRA B' },
+  'L3_SE_LOM_SSAA': { id:'L3_SE_LOM_SSAA', title:'SE_LOM_SSAA_380/220VAC', level:3, parent:'L2_CEPLOM_SE_LOMITAS', children: [], desc:'SISTEMA AUXILIAR 380/220VAC' },
+  'L3_SE_LOM_DISTRIB_125_VDC': { id:'L3_SE_LOM_DISTRIB_125_VDC', title:'SE_LOM_DISTRIB_125_VDC', level:3, parent:'L2_CEPLOM_SE_LOMITAS', children: [], desc:'DISTRIBUCIÓN 125 VDC' },
+
+  'L3_AERO_MOTRZ_RESUMEN': { id:'L3_AERO_MOTRZ_RESUMEN', title:'AERO_MOTRZ_RESUMEN', level:3, parent:'L2_CEPLOM_MOTZ_REG', children: [], desc:'RESUMEN DE AEROGENERADOR' },
+  'L3_AERO_MOTRZ_PRODUCCION': { id:'L3_AERO_MOTRZ_PRODUCCION', title:'AERO_MOTRZ_PRODUCCION', level:3, parent:'L2_CEPLOM_MOTZ_REG', children: [], desc:'GENERACIÓN DEL AEROGENERADOR' },
+  'L3_AERO_MOTRZ_TM01': { id:'L3_AERO_MOTRZ_TM01', title:'AERO_MOTRZ_TM01_H1@H6', level:3, parent:'L2_CEPLOM_MOTZ_REG', children: [], desc:'TORRE MÁSTIL #1 H1–H6' },
+  'L3_AERO_MOTRZ_TM02': { id:'L3_AERO_MOTRZ_TM02', title:'AERO_MOTRZ_TM02_H1@H6', level:3, parent:'L2_CEPLOM_MOTZ_REG', children: [], desc:'TORRE MÁSTIL #2 H1–H6' },
+  'L3_AERO_REG_AC01': { id:'L3_AERO_REG_AC01', title:'AERO_REG_AC01', level:3, parent:'L2_CEPLOM_MOTZ_REG', children: [], desc:'REGULACIÓN ACTIVA' },
+  'L3_AERO_REG_RE01': { id:'L3_AERO_REG_RE01', title:'AERO_REG_RE01', level:3, parent:'L2_CEPLOM_MOTZ_REG', children: [], desc:'REGULACIÓN REACTIVA' },
+  'L3_AERO_REG_BATERIAS': { id:'L3_AERO_REG_BATERIAS', title:'AERO_REG_BATERIAS', level:3, parent:'L2_CEPLOM_MOTZ_REG', children: [], desc:'BANCO DE BATERÍAS Y PARÁMETROS' },
+
+  'L3_ESTMET_MAPA': { id:'L3_ESTMET_MAPA', title:'ESTMET_MAPA', level:3, parent:'L2_CEPLOM_EST_MET', children: [], desc:'MAPA – DATOS DE LAS ESTACIONES (57)' },
+  'L3_ESTMET_DISPO_ESTELA': { id:'L3_ESTMET_DISPO_ESTELA', title:'ESTMET_DISPO_ESTELA', level:3, parent:'L2_CEPLOM_EST_MET', children: [], desc:'TABLA – DATOS DE LAS ESTACIONES (57)' },
+
+  'L3_SSAA_UPS': { id:'L3_SSAA_UPS', title:'SSAA_UPS', level:3, parent:'L2_CEPLOM_SSAA', children: [], desc:'UPS' },
+  'L3_SSAA_VARIABLE': { id:'L3_SSAA_VARIABLE', title:'SSAA_VARIABLE', level:3, parent:'L2_CEPLOM_SSAA', children: [], desc:'VARIABLES EXTRAS' },
+  'L3_SSAA_P1': { id:'L3_SSAA_P1', title:'SSAA_P#1', level:3, parent:'L2_CEPLOM_SSAA', children: [], desc:'PANEL #1' },
+  'L3_SSAA_P2': { id:'L3_SSAA_P2', title:'SSAA_P#2', level:3, parent:'L2_CEPLOM_SSAA', children: [], desc:'PANEL #2' },
+  'L3_SSAA_P3': { id:'L3_SSAA_P3', title:'SSAA_P#3', level:3, parent:'L2_CEPLOM_SSAA', children: [], desc:'PANEL #3' },
+  'L3_SSAA_P4': { id:'L3_SSAA_P4', title:'SSAA_P#4', level:3, parent:'L2_CEPLOM_SSAA', children: [], desc:'PANEL #4' },
+
+  'L3_ARQRED_SELOMITAS': { id:'L3_ARQRED_SELOMITAS', title:'ARQRED_SELOMITAS', level:3, parent:'L2_CEPLOM_ARQRED', children: [], desc:'ARQUITECTURA DE RED – SE LOMITAS' },
+  'L3_ARQRED_SEDERIVACION': { id:'L3_ARQRED_SEDERIVACION', title:'ARQRED_SEDERIVACIÓN', level:3, parent:'L2_CEPLOM_ARQRED', children: [], desc:'ARQUITECTURA DE RED – SE DERIVACIÓN' },
+  'L3_ARQRED_AERO': { id:'L3_ARQRED_AERO', title:'ARQRED_AERO', level:3, parent:'L2_CEPLOM_ARQRED', children: [], desc:'ARQUITECTURA DE RED – AERO' }
+};
+
+/******************* 2) Estado *******************/
+const OPEN_NODES_KEY = 'hmiOpenNodes';
+const openNodes = new Set(JSON.parse(localStorage.getItem(OPEN_NODES_KEY) || '[]'));
+const saveOpenNodes = () => localStorage.setItem(OPEN_NODES_KEY, JSON.stringify([...openNodes]));
+
+/******************* 3) DOM *******************/
+const navTreeContainer = document.getElementById('nav-tree');
+const screenTitle = document.getElementById('screen-title');
+const screenDescription = document.getElementById('screen-description');
+const breadcrumbsEl = document.getElementById('breadcrumbs');
+const screenPlaceholder = document.getElementById('screen-placeholder');
+const nextLevelButtons = document.getElementById('next-level-buttons');
+const nextLevelContainer = document.getElementById('next-level-container');
+const backButton = document.getElementById('back-button');
+const bookmarkButton = document.getElementById('bookmark-button');
+
+/******************* 4) Árbol *******************/
+function renderNavTree(){
+  navTreeContainer.innerHTML = '';
+  navTreeContainer.appendChild(createTreeLevel(['L0_GENERAL']));
+}
+
+function createTreeLevel(ids){
+  const ul = document.createElement('ul');
+  ids.forEach(id => {
+    const s = hmiData[id]; if(!s) return;
+    const li = document.createElement('li');
+
+    const row = document.createElement('div');
+    row.className = 'nav-tree-item';
+
+    if (s.children && s.children.length){
+      const caret = document.createElement('span');
+      caret.className = 'caret-char select-none';
+      caret.textContent = openNodes.has(id) ? '▲' : '▼';
+      caret.title = 'Expandir/contraer';
+      caret.addEventListener('click', (e)=>{
+        e.stopPropagation();
+        if(openNodes.has(id)) openNodes.delete(id); else openNodes.add(id);
+        saveOpenNodes(); renderNavTree();
+      });
+      row.appendChild(caret);
+
+      const title = document.createElement('span');
+      title.className = 'truncate';
+      title.textContent = s.title;
+      title.addEventListener('click', (e)=>{ e.stopPropagation(); navigateTo(id); });
+      row.appendChild(title);
+    } else {
+      row.innerHTML = `<span class='caret-char'></span><span class='truncate'>${s.title}</span>`;
+      row.addEventListener('click', ()=> navigateTo(id));
+    }
+
+    li.appendChild(row);
+
+    if (s.children && s.children.length){
+      const childrenWrap = document.createElement('div');
+      childrenWrap.className = `nav-children ${openNodes.has(id) ? '' : 'nav-hidden'}`;
+      childrenWrap.appendChild(createTreeLevel(s.children));
+      li.appendChild(childrenWrap);
+    }
+
+    ul.appendChild(li);
+  });
+  return ul;
+}
+
+/******************* 5) Contenido *******************/
+function renderBreadcrumbs(screenId){
+  const path = [];
+  let cur = hmiData[screenId];
+  while(cur){ path.unshift(cur); cur = cur.parent ? hmiData[cur.parent] : null; }
+  breadcrumbsEl.innerHTML = '';
+  path.forEach((node, i) => {
+    const a = document.createElement('a');
+    a.href = '#'; a.textContent = node.title;
+    if (i < path.length - 1){ a.onclick = e=>{ e.preventDefault(); navigateTo(node.id); }; }
+    else { a.classList.add('font-semibold','text-white'); }
+    breadcrumbsEl.appendChild(a);
+    if (i < path.length - 1){ const sep = document.createElement('span'); sep.textContent=' / '; sep.className='sep'; breadcrumbsEl.appendChild(sep); }
+  });
+}
+
+function navigateTo(screenId){
+  const s = hmiData[screenId]; if(!s){ console.warn('Pantalla no encontrada:', screenId); return; }
+  console.log('[NAV] ->', screenId);
+  screenTitle.textContent = s.title;
+  screenDescription.textContent = s.desc || '';
+  document.title = `HMI • ${s.title}`;
+  renderBreadcrumbs(screenId);
+  // === Mostrar imagen si existe; de lo contrario, placeholder ===
+const content = document.getElementById('screen-content');
+
+if (s.img) {
+  content.innerHTML = `
+    <div class="relative w-full" style="aspect-ratio: 16 / 9;">
+      <img src="${s.img}" alt="${s.title}"
+           class="absolute inset-0 w-full h-full object-cover rounded-lg shadow-lg border border-gray-700" />
+    </div>
+  `;
+} else {
+  content.innerHTML = `
+    <div class="flex items-center justify-center h-full text-gray-500">
+      <div class="text-center">
+        <p class="text-2xl font-semibold">Sin vista asignada</p>
+        <p class="mt-1 text-sm opacity-80">(Esta pantalla no tiene imagen)</p>
+      </div>
+    </div>
+  `;
+}
+;
+  renderNextLevelButtons(s.children);
+  backButton.disabled = !s.parent;
+  backButton.onclick = s.parent ? (()=>navigateTo(s.parent)) : null;
+  updateBookmarkButton(screenId);
+  let cur = s; while(cur && cur.parent){ openNodes.add(cur.parent); cur = hmiData[cur.parent]; }
+  saveOpenNodes(); renderNavTree();
+}
+
+function renderNextLevelButtons(children){
+  nextLevelButtons.innerHTML = '';
+  if(!children || !children.length){ nextLevelContainer.style.display='none'; return; }
+  nextLevelContainer.style.display='block';
+  children.forEach(id=>{
+    const c = hmiData[id]; if(!c) return;
+    const btn = document.createElement('button');
+    btn.className = 'w-full text-left bg-gray-700 hover:bg-gray-600 text-white font-medium py-3 px-4 rounded-lg shadow-md transition duration-200';
+    btn.textContent = c.title;
+    btn.title = c.desc || '';
+    btn.addEventListener('click', ()=>{ console.log('[CLICK child]', id); navigateTo(id); });
+    nextLevelButtons.appendChild(btn);
+  });
+}
+
+let bookmarks = JSON.parse(localStorage.getItem('hmiBookmarks') || '[]');
+function updateBookmarkButton(id){
+  const on = bookmarks.includes(id);
+  bookmarkButton.textContent = on ? 'Quitar Bookmark' : 'Agregar a Bookmarks';
+  bookmarkButton.className = 'flex items-center space-x-2 ' + (on ? 'bg-yellow-600 hover:bg-yellow-700' : 'bg-blue-600 hover:bg-blue-700') + ' text-white font-semibold py-2 px-4 rounded-lg shadow-md transition duration-200';
+  bookmarkButton.onclick = ()=>{
+    const i = bookmarks.indexOf(id);
+    if(i>-1) bookmarks.splice(i,1); else bookmarks.push(id);
+    localStorage.setItem('hmiBookmarks', JSON.stringify(bookmarks));
+    updateBookmarkButton(id);
+  };
+}
+
+/******************* 6) Expandir/Colapsar *******************/
+const expandAllBtn = document.getElementById('expand-all');
+const collapseAllBtn = document.getElementById('collapse-all');
+expandAllBtn.addEventListener('click', () => {
+  Object.keys(hmiData).forEach(k => { if (hmiData[k].children && hmiData[k].children.length) openNodes.add(k); });
+  saveOpenNodes(); renderNavTree();
+});
+collapseAllBtn.addEventListener('click', () => {
+  openNodes.clear(); saveOpenNodes(); renderNavTree();
+});
+
+/******************* 7) Inicio *******************/
+document.addEventListener('DOMContentLoaded', () => {
+  openNodes.add('L0_GENERAL'); saveOpenNodes();
+  renderNavTree();
+  navigateTo('L0_GENERAL');
+});
+</script>
+</body>
+</html>
